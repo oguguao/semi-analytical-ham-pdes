@@ -1,0 +1,340 @@
+function chapter3_sections31_32_34_pdf()
+% CHAPTER 3 MATLAB SCRIPT (Sections 3.1, 3.2, and 3.4 tables/figures)
+% PDF-EXPORT VERSION
+%
+% Uses:
+%   - Problem 3.1 and Problem 3.2 models
+%   - Relative errors only (RelErr_u, RelErr_s)
+%   - Corrected Problem 3.2 exact moving boundary:
+%       s(t) = (t + 2 - sqrt(2))/sqrt(2)
+%
+% Outputs (saved to outputDir):
+%   Sec3_4_Table3_1_Problem3_1_Interface_10dp.csv
+%   Sec3_4_Table3_2_Problem3_2_Interface_10dp.csv
+%   Sec3_4_Table3_3_Problem3_1_uValues_10dp.csv
+%   Sec3_4_Table3_4_Problem3_2_uValues_10dp.csv
+%   Figure3_1_Problem3_1_Profiles.pdf
+%   Figure3_2_Problem3_2_Profiles.pdf
+%   Figure3_3_MovingBoundaries.pdf
+%   Figure3_4_h_of_t.pdf
+%
+% Optional PNG backups can be enabled below.
+
+clc; close all;
+
+%% -------------------------------------------------
+% 0) Output directory (writable)
+% --------------------------------------------------
+outputDir = fullfile(tempdir, 'Chapter3_31_32_34_outputs_pdf');
+if ~exist(outputDir, 'dir')
+    mkdir(outputDir);
+end
+fprintf('Outputs will be saved to:\n%s\n\n', outputDir);
+
+% Set true if you also want PNG backups of figures:
+makePngBackup = false;
+
+%% -------------------------------------------------
+% 1) Grids
+% --------------------------------------------------
+tVec  = 0:0.05:1;                    % requested time grid
+tSel  = [0, 0.25, 0.50, 0.75, 1.00]; % selected times for profile plots
+xFrac = [0, 0.25, 0.50, 0.75, 1.00]; % sample x as fraction of exact s(t)
+tol   = 1e-12;                       % denominator tolerance for RelErr
+
+%% =================================================
+% PROBLEM 3.1 (Section 3.1)
+% =================================================
+% u_HAM(x,t)=x*(-h*exp(t)+h-x+1), h=-1
+% s_HAM(t)=-h*exp(t)+h+1
+% exact pair used in your writeup:
+% u(x,t)=x*(exp(t)-x), s(t)=exp(t)
+
+h1_fun   = @(t) -ones(size(t));
+u1_exact = @(x,t) x.*(exp(t)-x);
+u1_ham   = @(x,t,h) x.*(-h.*exp(t) + h - x + 1);
+s1_exact = @(t) exp(t);
+s1_ham   = @(t,h) -h.*exp(t) + h + 1;
+
+h1   = h1_fun(tVec);
+s1e  = s1_exact(tVec);
+s1h  = s1_ham(tVec, h1);
+reS1 = relerr_vec(s1h, s1e, tol);
+
+% Section 3.4 - Table 3.1
+data31 = [tVec(:), h1(:), s1h(:), s1e(:), reS1(:)];
+hdr31  = {'t','h_t','s_HAM','s_exact','RelErr_s'};
+write_csv_10dp(fullfile(outputDir,'Sec3_4_Table3_1_Problem3_1_Interface_10dp.csv'), hdr31, data31);
+
+% Section 3.4 - Table 3.3 (u values for Problem 3.1)
+rows1 = [];
+for it = 1:numel(tVec)
+    tj   = tVec(it);
+    sj   = s1e(it);
+    xVal = xFrac * sj;
+
+    for ix = 1:numel(xVal)
+        xj = xVal(ix);
+        ue = u1_exact(xj, tj);
+        uh = u1_ham(xj, tj, h1(it));
+        re = relerr_scalar(uh, ue, tol);
+        rows1 = [rows1; tj, xj, ue, uh, re]; %#ok<AGROW>
+    end
+end
+hdr33 = {'t','x','u_exact','u_HAM','RelErr_u'};
+write_csv_10dp(fullfile(outputDir,'Sec3_4_Table3_3_Problem3_1_uValues_10dp.csv'), hdr33, rows1);
+
+%% =================================================
+% PROBLEM 3.2 (Section 3.2)
+% =================================================
+% u_exact(x,t)=exp(1-(1+x)/sqrt(2)+t/2)-1
+% CORRECTED s_exact(t)=(t+2-sqrt(2))/sqrt(2)
+% u_HAM(x,t)=-1+((8+(t^2-4t)h^2-8ht)*exp(1+((-x-1)*sqrt(2))/2))/8
+% h(t): closed form from your derivation, with h(0)=-1 limit value
+% s_HAM(t)= -((sqrt(2)+2*ln(8/(h^2*t^2-4*h^2*t-8*h*t+8))-2)*sqrt(2))/2
+
+u2_exact = @(x,t) exp(1 - (1+x)./sqrt(2) + t/2) - 1;
+u2_ham   = @(x,t,h) -1 + ((8 + (t.^2 - 4.*t).*h.^2 - 8.*h.*t) ...
+                  .*exp(1 + ((-x-1).*sqrt(2))/2))/8;
+
+% -------- corrected exact moving boundary --------
+s2_exact = @(t) (t + 2 - sqrt(2))/sqrt(2);
+
+h2   = h2_of_t(tVec);
+s2e  = s2_exact(tVec);
+s2h  = s2_ham_of_t(tVec, h2);
+reS2 = relerr_vec(s2h, s2e, tol);
+
+% Section 3.4 - Table 3.2
+data32 = [tVec(:), h2(:), s2h(:), s2e(:), reS2(:)];
+hdr32  = {'t','h_t','s_HAM','s_exact','RelErr_s'};
+write_csv_10dp(fullfile(outputDir,'Sec3_4_Table3_2_Problem3_2_Interface_10dp.csv'), hdr32, data32);
+
+% Section 3.4 - Table 3.4 (u values for Problem 3.2)
+rows2 = [];
+for it = 1:numel(tVec)
+    tj   = tVec(it);
+    sj   = s2e(it);
+    hj   = h2(it);
+    xVal = xFrac * sj;
+
+    for ix = 1:numel(xVal)
+        xj = xVal(ix);
+        ue = u2_exact(xj, tj);
+        uh = real(u2_ham(xj, tj, hj));
+        re = relerr_scalar(uh, ue, tol);
+        rows2 = [rows2; tj, xj, ue, uh, re]; %#ok<AGROW>
+    end
+end
+hdr34 = {'t','x','u_exact','u_HAM','RelErr_u'};
+write_csv_10dp(fullfile(outputDir,'Sec3_4_Table3_4_Problem3_2_uValues_10dp.csv'), hdr34, rows2);
+
+%% -------------------------------------------------
+% 2) Figures (PDF export)
+% --------------------------------------------------
+
+% Figure 3.1: Problem 3.1 profiles
+f1 = figure('Color','w');
+hold on;
+for k = 1:numel(tSel)
+    tj = tSel(k);
+    xPlot = linspace(0, s1_exact(tj), 400);
+    plot(xPlot, u1_exact(xPlot,tj), 'LineWidth', 1.6, ...
+        'DisplayName', sprintf('Exact, t=%.2f', tj));
+    plot(xPlot, u1_ham(xPlot,tj,-1), '--', 'LineWidth', 1.2, ...
+        'DisplayName', sprintf('HAM, t=%.2f', tj));
+end
+xlabel('x'); ylabel('u(x,t)');
+title('Figure 3.1: Problem 3.1 Temperature Profiles (Exact vs HAM)');
+grid on; legend('Location','bestoutside');
+save_figure_pdf(f1, fullfile(outputDir,'Figure3_1_Problem3_1_Profiles.pdf'), makePngBackup);
+
+% Figure 3.2: Problem 3.2 profiles
+f2 = figure('Color','w');
+hold on;
+for k = 1:numel(tSel)
+    tj = tSel(k);
+    hj = h2_of_t(tj);
+    xPlot = linspace(0, s2_exact(tj), 400);
+    plot(xPlot, u2_exact(xPlot,tj), 'LineWidth', 1.6, ...
+        'DisplayName', sprintf('Exact, t=%.2f', tj));
+    plot(xPlot, real(u2_ham(xPlot,tj,hj)), '--', 'LineWidth', 1.2, ...
+        'DisplayName', sprintf('HAM, t=%.2f', tj));
+end
+xlabel('x'); ylabel('u(x,t)');
+title('Figure 3.2: Problem 3.2 Temperature Profiles (Exact vs HAM)');
+grid on; legend('Location','bestoutside');
+save_figure_pdf(f2, fullfile(outputDir,'Figure3_2_Problem3_2_Profiles.pdf'), makePngBackup);
+
+% Figure 3.3: Moving boundaries (exact vs HAM)
+f3 = figure('Color','w');
+plot(tVec, s1e, 'LineWidth', 1.8, 'DisplayName', 'Problem 3.1 Exact s(t)'); hold on;
+plot(tVec, s1h, '--', 'LineWidth', 1.8, 'DisplayName', 'Problem 3.1 HAM s(t)');
+plot(tVec, s2e, 'LineWidth', 1.8, 'DisplayName', 'Problem 3.2 Exact s(t)');
+plot(tVec, s2h, '--', 'LineWidth', 1.8, 'DisplayName', 'Problem 3.2 HAM s(t)');
+xlabel('t'); ylabel('s(t)');
+title('Figure 3.3: Moving Boundary Comparison');
+grid on; legend('Location','best');
+save_figure_pdf(f3, fullfile(outputDir,'Figure3_3_MovingBoundaries.pdf'), makePngBackup);
+
+% Figure 3.4: h(t)
+f4 = figure('Color','w');
+plot(tVec, h1, 'LineWidth', 1.8, 'DisplayName', 'Problem 3.1 h(t)'); hold on;
+plot(tVec, h2, 'LineWidth', 1.8, 'DisplayName', 'Problem 3.2 h(t)');
+xlabel('t'); ylabel('h(t)');
+title('Figure 3.4: Convergence-Control Parameter h(t)');
+grid on; legend('Location','best');
+save_figure_pdf(f4, fullfile(outputDir,'Figure3_4_h_of_t.pdf'), makePngBackup);
+
+%% -------------------------------------------------
+% 3) Console preview
+% --------------------------------------------------
+disp('Preview: Section 3.4 - Table 3.1 (first 5 rows)');
+disp(data31(1:min(5,size(data31,1)),:));
+
+disp('Preview: Section 3.4 - Table 3.2 (first 5 rows)');
+disp(data32(1:min(5,size(data32,1)),:));
+
+disp('Preview: Section 3.4 - Table 3.3 (first 5 rows)');
+disp(rows1(1:min(5,size(rows1,1)),:));
+
+disp('Preview: Section 3.4 - Table 3.4 (first 5 rows)');
+disp(rows2(1:min(5,size(rows2,1)),:));
+
+fprintf('\nDone.\nAll files saved in:\n%s\n', outputDir);
+
+end
+
+
+% =====================================================
+% Helper functions
+% =====================================================
+
+function h = h2_of_t(t)
+% Robust evaluation of h(t) in Problem 3.2
+% h(0) set by continuity limit to -1
+
+a = exp(1 - sqrt(2)/2);
+h = zeros(size(t));
+
+for i = 1:numel(t)
+    ti = t(i);
+
+    if abs(ti) < 1e-14
+        h(i) = -1;
+        continue;
+    end
+
+    b = exp(1 - sqrt(2)/2 + ti/2);
+
+    rad = 2*a^2*ti^2 + 2*a*b*ti^2 + 8*a^2*ti - 8*a*b*ti;
+
+    if rad < 0 && rad > -1e-12
+        rad = 0; % roundoff guard
+    end
+    if rad < 0
+        h(i) = NaN;
+        continue;
+    end
+
+    den = a*ti*(ti - 4);
+    if abs(den) < 1e-14
+        h(i) = NaN;
+    else
+        h(i) = (2*(2*a*ti + sqrt(rad))) / den;
+    end
+end
+
+h = real(h);
+end
+
+
+function sH = s2_ham_of_t(t, h)
+% s_HAM(t) for Problem 3.2
+
+den = h.^2.*t.^2 - 4*h.^2.*t - 8*h.*t + 8;
+arg = 8 ./ den;
+
+sH = NaN(size(t));
+for i = 1:numel(t)
+    if isfinite(arg(i)) && (arg(i) > 0)
+        sH(i) = -((sqrt(2) + 2*log(arg(i)) - 2)*sqrt(2))/2;
+    end
+end
+
+sH = real(sH);
+end
+
+
+function e = relerr_scalar(approx, exact, tol)
+% Relative error for scalar values
+if abs(exact) > tol
+    e = abs(exact - approx)/abs(exact);
+else
+    e = NaN; % undefined when exact ~ 0
+end
+end
+
+
+function e = relerr_vec(approx, exact, tol)
+% Relative error for vectors
+e = NaN(size(exact));
+idx = abs(exact) > tol;
+e(idx) = abs(exact(idx) - approx(idx)) ./ abs(exact(idx));
+end
+
+
+function write_csv_10dp(filename, headers, data)
+% Robust CSV writer with fixed 10 decimal places
+
+parentDir = fileparts(filename);
+if ~isempty(parentDir) && ~exist(parentDir, 'dir')
+    mkdir(parentDir);
+end
+
+[fid, msg] = fopen(filename, 'wt');
+if fid == -1
+    error('Could not open file for writing: %s\nReason: %s', filename, msg);
+end
+
+% header row
+for j = 1:numel(headers)-1
+    fprintf(fid, '%s,', headers{j});
+end
+fprintf(fid, '%s\n', headers{end});
+
+% numeric rows
+[nRow, nCol] = size(data);
+fmt = [repmat('%.10f,', 1, nCol-1), '%.10f\n'];
+for i = 1:nRow
+    row = data(i,:);
+    row(~isfinite(row)) = NaN;
+    fprintf(fid, fmt, row);
+end
+
+fclose(fid);
+end
+
+
+function save_figure_pdf(figHandle, pdfPath, makePngBackup)
+% Save figure as vector PDF (preferred for LaTeX).
+% Uses exportgraphics when available; falls back to print -dpdf -painters.
+
+parentDir = fileparts(pdfPath);
+if ~isempty(parentDir) && ~exist(parentDir, 'dir')
+    mkdir(parentDir);
+end
+
+if exist('exportgraphics', 'file') == 2
+    exportgraphics(figHandle, pdfPath, 'ContentType', 'vector');
+else
+    set(figHandle, 'PaperPositionMode', 'auto');
+    print(figHandle, pdfPath, '-dpdf', '-painters');
+end
+
+if makePngBackup
+    [p, n, ~] = fileparts(pdfPath);
+    pngPath = fullfile(p, [n '.png']);
+    saveas(figHandle, pngPath);
+end
+end

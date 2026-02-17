@@ -1,0 +1,100 @@
+% =========================================================
+% Chapter 3 - Problem C (With Source Term, 1D)
+%
+% Problem C:
+%   u_t - u_xx = x*exp(t) + 2
+%   u(x,t)      = x*(exp(t) - x)
+%   s(t)        = exp(t)
+%   h(t)        = -1
+%   u_HAM(x,t)  = x*(-h*exp(t) + h - x + 1)
+%   s_HAM(t)    = -h*exp(t) + h + 1
+%
+% Table columns:
+%   t, h(t), RelErr_u_at_x035, RelErr_s
+% =========================================================
+
+clc; clear; close all;
+
+%% Settings
+x_eval = 0.35;
+t = (0:0.05:1)';
+
+%% Writable output folder
+userProfile = getenv('USERPROFILE');
+if ~isempty(userProfile)
+    outputDir = fullfile(userProfile, 'Documents', 'MATLAB', 'Chapter3_ProblemC');
+else
+    outputDir = fullfile(pwd, 'Chapter3_ProblemC');
+end
+if ~exist(outputDir, 'dir')
+    mkdir(outputDir);
+end
+
+%% h(t), exact and HAM solutions
+h = -ones(size(t));   % h(t) = -1
+
+u_exact = x_eval .* (exp(t) - x_eval);
+u_ham   = x_eval .* (-h .* exp(t) + h - x_eval + 1);
+
+s_exact = exp(t);
+s_ham   = -h .* exp(t) + h + 1;
+
+% Force real (safety)
+u_ham = real(u_ham);
+s_ham = real(s_ham);
+
+%% Relative errors
+RelErr_u = abs(u_exact - u_ham) ./ max(abs(u_exact), eps);
+RelErr_s = abs(s_exact - s_ham) ./ max(abs(s_exact), eps);
+
+%% Output table
+T = table(t, h, RelErr_u, RelErr_s, ...
+    'VariableNames', {'t', 'h_t', 'RelErr_u_at_x035', 'RelErr_s'});
+
+disp(' ');
+disp('Chapter 3 Problem C: t, h(t), RelErr_u(x=0.35,t), RelErr_s(t)');
+disp(T);
+
+%% Save CSV safely
+csvFile = fullfile(outputDir, 'Table3_3_ProblemC_t_h_RelErrU_RelErrS_x035.csv');
+try
+    writetable(T, csvFile);
+    fprintf('\nCSV saved to:\n%s\n', csvFile);
+catch ME
+    warning('Primary CSV save failed: %s', ME.message);
+    fallbackFile = fullfile(tempdir, ...
+        ['Table3_3_ProblemC_' datestr(now,'yyyymmdd_HHMMSS') '.csv']);
+    writetable(T, fallbackFile);
+    fprintf('CSV saved to temp folder instead:\n%s\n', fallbackFile);
+end
+
+%% Plot 1: u(x,t) vs u_HAM(x,t)
+fig1 = figure;
+plot(t, u_exact, '-o', 'LineWidth', 1.2, 'MarkerSize', 5); hold on;
+plot(t, u_ham,   '--s', 'LineWidth', 1.2, 'MarkerSize', 5);
+grid on;
+xlabel('t');
+ylabel(sprintf('u(%.2f,t)', x_eval));
+title(sprintf('Problem C: u(x,t) vs u_{HAM}(x,t) at x=%.2f', x_eval));
+legend('u(x,t) exact', 'u_{HAM}(x,t)', 'Location', 'best');
+
+%% Plot 2: s(t) vs s_HAM(t)
+fig2 = figure;
+plot(t, s_exact, '-o', 'LineWidth', 1.2, 'MarkerSize', 5); hold on;
+plot(t, s_ham,   '--s', 'LineWidth', 1.2, 'MarkerSize', 5);
+grid on;
+xlabel('t');
+ylabel('s(t)');
+title('Problem C: s(t) vs s_{HAM}(t)');
+legend('s(t) exact', 's_{HAM}(t)', 'Location', 'best');
+
+%% Save plots (PNG + PDF)
+try
+    exportgraphics(fig1, fullfile(outputDir, 'Figure3_5_ProblemC_u_vs_uHAM.png'), 'Resolution', 300);
+    exportgraphics(fig1, fullfile(outputDir, 'Figure3_5_ProblemC_u_vs_uHAM.pdf'), 'ContentType', 'vector');
+    exportgraphics(fig2, fullfile(outputDir, 'Figure3_6_ProblemC_s_vs_sHAM.png'), 'Resolution', 300);
+    exportgraphics(fig2, fullfile(outputDir, 'Figure3_6_ProblemC_s_vs_sHAM.pdf'), 'ContentType', 'vector');
+    fprintf('\nPlots saved in:\n%s\n', outputDir);
+catch ME
+    warning('Plot export warning: %s', ME.message);
+end

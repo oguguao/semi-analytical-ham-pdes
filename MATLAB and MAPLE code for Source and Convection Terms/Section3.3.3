@@ -1,0 +1,165 @@
+% =========================================================
+% Chapter 3 - Problem D (Source + Convection, 1D)
+% Complex-aware version: keeps BOTH real and imaginary parts of h(t)
+%
+% Given:
+% h(t) = (2*(3*exp(1)*exp(t) - 6*exp(1)*t - 3*exp(1) - sqrt(Delta))) ...
+%        /(exp(1)*(-9*t^2 + 2*exp(t) + 6*t - 2))
+%
+% s_HAM(t) = 1 - log(-8/(-8 - 9*h^2*t^2 + 2*exp(t)*h^2 + 6*h^2*t ...
+%               - 12*h*exp(t) - 2*h^2 + 24*h*t + 12*h))
+%
+% u_HAM(x,t) = -1 + (((-2*h^2 + 12*h)*exp(t) + 8 + (9*t^2 - 6*t + 2)*h^2 ...
+%                + (-24*t - 12)*h)*exp(1 - x))/8
+%
+% u(x,t) = exp(t - x + 1) - 1
+% s(t)   = t + 1
+%
+% Table columns:
+%   t, Re(h), Im(h), RelErr_u_at_x055, RelErr_s
+%
+% Notes:
+% - t=0 gives 0/0 in h(t). We evaluate h at a tiny epsilon for that row.
+% - Errors use complex modulus: abs(exact - approx)/abs(exact)
+% =========================================================
+
+clc; clear; close all;
+
+%% -----------------------------
+% Settings
+% ------------------------------
+x_eval = 0.55;               % fixed x for u(x,t)
+t = (0:0.05:1)';             % display/report grid
+n = numel(t);
+
+% for h(t) evaluation only (to avoid 0/0 at t=0)
+t_h = t;
+t_h(1) = 1e-6;
+
+%% -----------------------------
+% Safe writable output folder
+% ------------------------------
+userProfile = getenv('USERPROFILE');
+if ~isempty(userProfile)
+    outputDir = fullfile(userProfile, 'Documents', 'MATLAB', 'Chapter3_ProblemD_ComplexH');
+else
+    outputDir = fullfile(pwd, 'Chapter3_ProblemD_ComplexH');
+end
+if ~exist(outputDir, 'dir')
+    mkdir(outputDir);
+end
+
+%% -----------------------------
+% Compute h(t) with complex support
+% ------------------------------
+e1 = exp(1);
+h = zeros(n,1);   % complex values possible
+
+for j = 1:n
+    tj = t_h(j);
+
+    Delta = 9*e1^2*exp(tj)^2 ...
+          - 36*e1^2*exp(tj)*tj ...
+          + 18*e1^2*tj^2 ...
+          + 18*e1*exp(tj + 1)*tj^2 ...
+          - 14*e1^2*exp(tj) ...
+          + 48*e1^2*tj ...
+          - 4*e1*exp(tj + 1)*exp(tj) ...
+          - 12*e1*exp(tj + 1)*tj ...
+          + 5*e1^2 ...
+          + 4*e1*exp(tj + 1);
+
+    num = 2*(3*e1*exp(tj) - 6*e1*tj - 3*e1 - sqrt(complex(Delta,0)));
+    den = e1*(-9*tj^2 + 2*exp(tj) + 6*tj - 2);
+
+    h(j) = num/den;
+end
+
+%% -----------------------------
+% Exact solutions
+% ------------------------------
+u_exact = exp(t - x_eval + 1) - 1;  % real
+s_exact = t + 1;                    % real
+
+%% -----------------------------
+% HAM approximations (complex allowed)
+% ------------------------------
+u_ham = -1 + (((-2*h.^2 + 12*h).*exp(t) + 8 + (9*t.^2 - 6*t + 2).*h.^2 ...
+        + (-24*t - 12).*h) .* exp(1 - x_eval)) / 8;
+
+den_s = -8 - 9*h.^2.*t.^2 + 2*exp(t).*h.^2 + 6*h.^2.*t ...
+      - 12*h.*exp(t) - 2*h.^2 + 24*h.*t + 12*h;
+
+s_ham = 1 - log(-8 ./ den_s);
+
+%% -----------------------------
+% Relative errors (complex modulus)
+% ------------------------------
+RelErr_u = abs(u_exact - u_ham) ./ max(abs(u_exact), eps);
+RelErr_s = abs(s_exact - s_ham) ./ max(abs(s_exact), eps);
+
+%% -----------------------------
+% Output table
+% ------------------------------
+T = table(t, real(h), imag(h), RelErr_u, RelErr_s, ...
+    'VariableNames', {'t', 'h_real', 'h_imag', 'RelErr_u_at_x055', 'RelErr_s'});
+
+disp(' ');
+disp('Chapter 3 Problem D (complex h): t, Re(h), Im(h), RelErr_u(x=0.55,t), RelErr_s(t)');
+disp(T);
+
+%% -----------------------------
+% Save CSV safely
+% ------------------------------
+csvFile = fullfile(outputDir, 'Table3_4_ProblemD_complexH_t_hReal_hImag_RelErrU_RelErrS_x055.csv');
+try
+    writetable(T, csvFile);
+    fprintf('\nCSV saved to:\n%s\n', csvFile);
+catch ME
+    warning('Primary CSV save failed: %s', ME.message);
+    fallbackFile = fullfile(tempdir, ...
+        ['Table3_4_ProblemD_complexH_' datestr(now,'yyyymmdd_HHMMSS') '.csv']);
+    writetable(T, fallbackFile);
+    fprintf('CSV saved to temp folder instead:\n%s\n', fallbackFile);
+end
+
+%% -----------------------------
+% Plot 1: u(x,t) vs u_HAM(x,t)
+% (Exact + real/imag parts of u_HAM)
+% ------------------------------
+fig1 = figure;
+plot(t, u_exact, '-o', 'LineWidth', 1.2, 'MarkerSize', 5); hold on;
+plot(t, real(u_ham), '--s', 'LineWidth', 1.2, 'MarkerSize', 5);
+plot(t, imag(u_ham), ':d', 'LineWidth', 1.2, 'MarkerSize', 5);
+grid on;
+xlabel('t');
+ylabel(sprintf('u(%.2f,t)', x_eval));
+title(sprintf('Problem D: u(x,t) exact vs Re/Im(u_{HAM}) at x=%.2f', x_eval));
+legend('u(x,t) exact', 'Re(u_{HAM})', 'Im(u_{HAM})', 'Location', 'best');
+
+%% -----------------------------
+% Plot 2: s(t) vs s_HAM(t)
+% (Exact + real/imag parts of s_HAM)
+% ------------------------------
+fig2 = figure;
+plot(t, s_exact, '-o', 'LineWidth', 1.2, 'MarkerSize', 5); hold on;
+plot(t, real(s_ham), '--s', 'LineWidth', 1.2, 'MarkerSize', 5);
+plot(t, imag(s_ham), ':d', 'LineWidth', 1.2, 'MarkerSize', 5);
+grid on;
+xlabel('t');
+ylabel('s(t)');
+title('Problem D: s(t) exact vs Re/Im(s_{HAM}(t))');
+legend('s(t) exact', 'Re(s_{HAM})', 'Im(s_{HAM})', 'Location', 'best');
+
+%% -----------------------------
+% Save plots (PNG + PDF)
+% ------------------------------
+try
+    exportgraphics(fig1, fullfile(outputDir, 'Figure3_7_ProblemD_u_vs_uHAM_complexH.png'), 'Resolution', 300);
+    exportgraphics(fig1, fullfile(outputDir, 'Figure3_7_ProblemD_u_vs_uHAM_complexH.pdf'), 'ContentType', 'vector');
+    exportgraphics(fig2, fullfile(outputDir, 'Figure3_8_ProblemD_s_vs_sHAM_complexH.png'), 'Resolution', 300);
+    exportgraphics(fig2, fullfile(outputDir, 'Figure3_8_ProblemD_s_vs_sHAM_complexH.pdf'), 'ContentType', 'vector');
+    fprintf('\nPlots saved in:\n%s\n', outputDir);
+catch ME
+    warning('Plot export warning: %s', ME.message);
+end

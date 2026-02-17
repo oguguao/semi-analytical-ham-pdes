@@ -1,0 +1,147 @@
+% ============================================================
+% Chapter4_2D_Example.m
+% 2D moving boundary example (HAM vs exact)
+% ============================================================
+
+clear; clc; close all;
+format long g;
+
+%% --------------------- User settings -----------------------
+x_eval = 0.55;   % point for u-error evaluation
+y_eval = 0.50;   % point for u-error evaluation
+x_eval  = 0.55;   % x-location for s-error evaluation
+t = (0:0.05:1).';  % time grid
+epsDen = 1e-14;
+
+%% --------------------- Safe output path --------------------
+outDir = getSafeOutDir('HAM_Book_Outputs', 'Chapter4_2D_Example');
+if ~exist(outDir, 'dir')
+    mkdir(outDir);
+end
+
+%% --------------------- Exact functions ---------------------
+u_exact = @(x,y,t) exp(t/8 + (x + y - 2)/4) - 1;
+s_exact = @(x,t) 2 - x - 0.5*t;
+
+% Domain check at chosen (x_eval, y_eval)
+if any(y_eval >= s_exact(x_eval, t))
+    error('Chosen y_eval=%.4f is outside/at interface for some t. Choose smaller y_eval.', y_eval);
+end
+
+%% --------------------- Allocate arrays ---------------------
+n = numel(t);
+h       = complex(zeros(n,1));
+uE      = zeros(n,1);
+uH      = complex(zeros(n,1));
+sE      = zeros(n,1);
+sH      = complex(zeros(n,1));
+RelErr_u = zeros(n,1);
+RelErr_s = zeros(n,1);
+
+%% --------------------- Main loop ---------------------------
+for k = 1:n
+    tk = t(k);
+
+    % h(y,t) from uploaded example
+    hk = h_fun(y_eval, tk);
+
+    % NOTE:
+    % Uploaded u_HAM line shows "-32*h(t)*t".
+    % We use hk = h(y_eval,t) consistently here.
+    uEk = u_exact(x_eval, y_eval, tk);
+    uHk = -1 + ((128 + (tk^2 - 16*tk)*(hk^2) - 32*hk*tk) * exp(x_eval/4 + y_eval/4 - 1/2)) / 128;
+
+    sEk = s_exact(x_eval, tk);
+    sHk = -x_eval + 2 + 4*log(128 / (hk^2*tk^2 - 16*hk^2*tk - 32*hk*tk + 128));
+
+    h(k) = hk;
+    uE(k) = uEk;
+    uH(k) = uHk;
+    sE(k) = sEk;
+    sH(k) = sHk;
+
+    RelErr_u(k) = abs(uHk - uEk) / max(abs(uEk), epsDen);
+    RelErr_s(k) = abs(sHk - sEk) / max(abs(sEk), epsDen);
+end
+
+%% --------------------- Table -------------------------------
+T = table( ...
+    t, real(h), imag(h), ...
+    uE, real(uH), imag(uH), ...
+    sE, real(sH), imag(sH), ...
+    RelErr_u, RelErr_s, ...
+    'VariableNames', { ...
+        't','h_real','h_imag', ...
+        'u_exact','uHAM_real','uHAM_imag', ...
+        's_exact','sHAM_real','sHAM_imag', ...
+        'RelErr_u','RelErr_s'} );
+
+disp('Chapter 4 (2D Example): t, h, u/s values, and relative errors');
+disp(T);
+
+csvFile = fullfile(outDir, 'Chapter4_2D_Example_Table.csv');
+writetable(T, csvFile);
+
+%% --------------------- Plot 1: u vs t ----------------------
+fig1 = figure('Color','w');
+plot(t, uE, 'o-', 'LineWidth', 1.5, 'MarkerSize', 5); hold on;
+plot(t, real(uH), 's--', 'LineWidth', 1.5, 'MarkerSize', 5);
+grid on;
+xlabel('t');
+ylabel('u(x_{eval}, y_{eval}, t)');
+title(sprintf('u_{Exact} vs u_{HAM} at (x,y) = (%.2f, %.2f)', x_eval, y_eval));
+legend('u_{Exact}', 'Re(u_{HAM})', 'Location', 'best');
+
+exportgraphics(fig1, fullfile(outDir, 'Figure_2DExample_u_vs_t.png'), 'Resolution', 300);
+exportgraphics(fig1, fullfile(outDir, 'Figure_2DExample_u_vs_t.pdf'), 'ContentType', 'vector');
+
+%% --------------------- Plot 2: s vs t ----------------------
+fig2 = figure('Color','w');
+plot(t, sE, 'o-', 'LineWidth', 1.5, 'MarkerSize', 5); hold on;
+plot(t, real(sH), 's--', 'LineWidth', 1.5, 'MarkerSize', 5);
+grid on;
+xlabel('t');
+ylabel('s(x_{int}, t)');
+title(sprintf('s_{Exact} vs s_{HAM} at x = %.2f', x_eval));
+legend('s_{Exact}', 'Re(s_{HAM})', 'Location', 'best');
+
+exportgraphics(fig2, fullfile(outDir, 'Figure_2DExample_s_vs_t.png'), 'Resolution', 300);
+exportgraphics(fig2, fullfile(outDir, 'Figure_2DExample_s_vs_t.pdf'), 'ContentType', 'vector');
+
+%% --------------------- Done -------------------------------
+fprintf('\nSaved outputs to:\n%s\n', outDir);
+fprintf('Table: %s\n', csvFile);
+
+% ============================================================
+% Local functions
+% ============================================================
+function h = h_fun(y, t)
+    % h(y,t) from uploaded 2D example
+    % h(y,t) = [8(2e^(-1/2+y/4)t + sqrt(2e^(...)^2 t^2 + 2e^(...)e^(...)t^2 + 32e^(...)^2 t - 32e^(...)e^(...)t))]
+    %          / [e^(-1/2+y/4)t(-16+t)]
+    if abs(t) < 1e-14
+        % limit t -> 0
+        h = -1;
+        return;
+    end
+
+    A = exp(-1/2 + y/4);
+    B = exp(t/8 + y/4 - 1/2);
+
+    rad = 2*(A^2)*t^2 + 2*A*B*t^2 + 32*(A^2)*t - 32*A*B*t;
+    h = (8*(2*A*t + sqrt(rad + 0i))) / (A*t*(-16 + t));
+end
+
+function outDir = getSafeOutDir(folderA, folderB)
+    if ispc
+        base = fullfile(getenv('USERPROFILE'), 'Documents');
+    elseif ismac
+        base = fullfile(getenv('HOME'), 'Documents');
+    else
+        base = getenv('HOME');
+        if isempty(base)
+            base = pwd;
+        end
+    end
+    outDir = fullfile(base, folderA, folderB);
+end
